@@ -1,0 +1,95 @@
+@page "/projects/{Id:guid}"
+@attribute [Authorize]
+@layout AppLayout
+@inject ProjectApiService ProjectApi
+
+<PageTitle>@(_project?.ProjectName ?? "Project") | TaskFlow</PageTitle>
+
+@if (_loading)
+{
+    <section class="project-page-content project-board-state" role="status">
+        <span class="project-loading-spinner" aria-hidden="true"></span>
+        <h1>Loading project</h1>
+    </section>
+}
+else if (_notFound)
+{
+    <section class="project-page-content project-board-state">
+        <span class="project-state-icon" aria-hidden="true">?</span>
+        <h1>Project not found</h1>
+        <p>This project does not exist or is not available to your account.</p>
+        <a class="project-primary-button" href="/projects">Back to projects</a>
+    </section>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <section class="project-page-content project-board-state" role="alert">
+        <span class="project-state-icon" aria-hidden="true">!</span>
+        <h1>Project could not be loaded</h1>
+        <p>@_error</p>
+        <button type="button" class="project-secondary-button" @onclick="LoadProjectAsync">Try again</button>
+    </section>
+}
+else if (_project is not null)
+{
+    <header class="project-topbar project-board-header">
+        <div>
+            <a class="project-breadcrumb" href="/projects">Projects</a>
+            <h1>@_project.ProjectName</h1>
+            <p>@_project.Description</p>
+        </div>
+        <span class="project-coming-soon">Task workflow coming later</span>
+    </header>
+
+    <section class="project-page-content">
+        <div class="kanban-board" aria-label="Empty project workflow">
+            @foreach (var column in Columns)
+            {
+                <section class="kanban-column">
+                    <header><h2>@column</h2><span>0</span></header>
+                    <div class="kanban-empty-column">
+                        <span aria-hidden="true">＋</span>
+                        <p>No tasks yet</p>
+                        <small>Task management will be added in a future milestone.</small>
+                    </div>
+                </section>
+            }
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private static readonly string[] Columns = ["Backlog", "To do", "In progress", "Done"];
+    private ProjectResponse? _project;
+    private bool _loading = true;
+    private bool _notFound;
+    private string? _error;
+
+    protected override Task OnParametersSetAsync() => LoadProjectAsync();
+
+    private async Task LoadProjectAsync()
+    {
+        _loading = true;
+        _notFound = false;
+        _error = null;
+        try
+        {
+            _project = await ProjectApi.GetProjectAsync(Id);
+            _notFound = _project is null;
+        }
+        catch (ProjectApiException exception)
+        {
+            _error = exception.Message;
+        }
+        catch
+        {
+            _error = "TaskFlow could not connect to the server. Please try again.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

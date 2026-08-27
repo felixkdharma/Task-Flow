@@ -1,0 +1,192 @@
+@page "/projects"
+@attribute [Authorize]
+@layout AppLayout
+@inject ProjectApiService ProjectApi
+@inject NavigationManager Navigation
+
+<PageTitle>Projects | TaskFlow</PageTitle>
+
+<header class="project-topbar">
+    <div>
+        <span class="eyebrow">Your work</span>
+        <h1>Projects</h1>
+        <p>Create a project now. Task workflows will be added in a later milestone.</p>
+    </div>
+    <button type="button" class="project-primary-button" @onclick="OpenCreateProject">
+        <span aria-hidden="true">＋</span> New project
+    </button>
+</header>
+
+<section class="project-page-content" aria-live="polite">
+    @if (_loading)
+    {
+        <div class="project-state-panel" role="status">
+            <span class="project-loading-spinner" aria-hidden="true"></span>
+            <h2>Loading projects</h2>
+            <p>Getting your workspace ready.</p>
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_loadError))
+    {
+        <div class="project-state-panel project-error-panel" role="alert">
+            <span class="project-state-icon" aria-hidden="true">!</span>
+            <h2>Projects could not be loaded</h2>
+            <p>@_loadError</p>
+            <button type="button" class="project-secondary-button" @onclick="LoadProjectsAsync">Try again</button>
+        </div>
+    }
+    else if (_projects.Count == 0)
+    {
+        <div class="project-state-panel">
+            <span class="project-state-icon" aria-hidden="true">□</span>
+            <span class="eyebrow">Start simply</span>
+            <h2>Create your first project</h2>
+            <p>Give your project a name and description. Its empty workflow board will be ready for the next milestone.</p>
+            <button type="button" class="project-primary-button" @onclick="OpenCreateProject">
+                <span aria-hidden="true">＋</span> Create project
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="project-list-heading">
+            <div><h2>All projects</h2><p>@ProjectCountLabel</p></div>
+        </div>
+        <div class="project-card-grid">
+            @foreach (var project in _projects)
+            {
+                <a class="project-card" href="@($"/projects/{project.Id}")">
+                    <span class="project-card-mark" aria-hidden="true">@ProjectInitial(project.ProjectName)</span>
+                    <div class="project-card-copy">
+                        <h3>@project.ProjectName</h3>
+                        <p>@project.Description</p>
+                    </div>
+                    <span class="project-card-action" aria-hidden="true">→</span>
+                </a>
+            }
+        </div>
+    }
+</section>
+
+@if (_showCreateProject)
+{
+    <div class="project-modal-backdrop" @onclick="CloseCreateProject">
+        <section class="project-modal" role="dialog" aria-modal="true" aria-labelledby="create-project-title" @onclick:stopPropagation="true">
+            <header class="project-modal-header">
+                <div><span class="eyebrow">New project</span><h2 id="create-project-title">Create a project</h2></div>
+                <button type="button" class="project-modal-close" @onclick="CloseCreateProject" aria-label="Close">×</button>
+            </header>
+
+            @if (!string.IsNullOrWhiteSpace(_createError))
+            {
+                <div class="project-form-alert" role="alert">@_createError</div>
+            }
+
+            <EditForm Model="_form" OnValidSubmit="CreateProjectAsync" FormName="create-project-form">
+                <DataAnnotationsValidator />
+                <div class="project-field">
+                    <label for="project-name">Project name</label>
+                    <input id="project-name" @bind="_form.ProjectName" @bind:event="oninput"
+                           maxlength="100" autocomplete="off" placeholder="Website redesign" autofocus />
+                    <ValidationMessage For="@(() => _form.ProjectName)" />
+                </div>
+                <div class="project-field">
+                    <label for="project-description">Description</label>
+                    <textarea id="project-description" @bind="_form.Description" @bind:event="oninput"
+                              maxlength="500" rows="5" placeholder="What is this project for?"></textarea>
+                    <div class="project-field-footer">
+                        <ValidationMessage For="@(() => _form.Description)" />
+                        <small>@_form.Description.Length / 500</small>
+                    </div>
+                </div>
+                <footer class="project-modal-actions">
+                    <button type="button" class="project-secondary-button" @onclick="CloseCreateProject" disabled="@_submitting">Cancel</button>
+                    <button type="submit" class="project-primary-button" disabled="@_submitting">
+                        @if (_submitting) { <span class="button-spinner"></span><span>Creating…</span> }
+                        else { <span>Create project</span> }
+                    </button>
+                </footer>
+            </EditForm>
+        </section>
+    </div>
+}
+
+@code {
+    private readonly List<ProjectResponse> _projects = [];
+    private ProjectFormModel _form = new();
+    private bool _loading = true;
+    private bool _showCreateProject;
+    private bool _submitting;
+    private string? _loadError;
+    private string? _createError;
+
+    private string ProjectCountLabel => _projects.Count == 1 ? "1 project" : $"{_projects.Count} projects";
+
+    protected override Task OnInitializedAsync() => LoadProjectsAsync();
+
+    private async Task LoadProjectsAsync()
+    {
+        _loading = true;
+        _loadError = null;
+        try
+        {
+            _projects.Clear();
+            _projects.AddRange(await ProjectApi.GetProjectsAsync());
+        }
+        catch (ProjectApiException exception)
+        {
+            _loadError = exception.Message;
+        }
+        catch
+        {
+            _loadError = "TaskFlow could not connect to the server. Please try again.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OpenCreateProject()
+    {
+        _form = new ProjectFormModel();
+        _createError = null;
+        _showCreateProject = true;
+    }
+
+    private void CloseCreateProject()
+    {
+        if (!_submitting)
+        {
+            _showCreateProject = false;
+        }
+    }
+
+    private async Task CreateProjectAsync()
+    {
+        _submitting = true;
+        _createError = null;
+        try
+        {
+            var project = await ProjectApi.CreateProjectAsync(_form);
+            _projects.Add(project);
+            _showCreateProject = false;
+            Navigation.NavigateTo($"/projects/{project.Id}");
+        }
+        catch (ProjectApiException exception)
+        {
+            _createError = exception.Message;
+        }
+        catch
+        {
+            _createError = "TaskFlow could not connect to the server. Please try again.";
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+
+    private static string ProjectInitial(string name) =>
+        string.IsNullOrWhiteSpace(name) ? "P" : char.ToUpperInvariant(name.Trim()[0]).ToString();
+}

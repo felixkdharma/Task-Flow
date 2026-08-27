@@ -1,0 +1,32 @@
+@inject AuthSessionService AuthSession
+
+@if (!_initialized)
+{
+    <div class="app-loading" role="status" aria-live="polite">
+        <div class="brand-mark small" aria-hidden="true">T</div>
+        <span>Preparing TaskFlow…</span>
+    </div>
+}
+else
+{
+    <CascadingAuthenticationState>
+        <Router AppAssembly="@typeof(App).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+            <Found Context="routeData">
+                <AuthorizeRouteView RouteData="routeData" DefaultLayout="@typeof(MainLayout)">
+                    <NotAuthorized><RedirectToLogin /></NotAuthorized>
+                </AuthorizeRouteView>
+                <FocusOnNavigate RouteData="routeData" Selector="h1" />
+            </Found>
+        </Router>
+    </CascadingAuthenticationState>
+}
+
+@code {
+    private bool _initialized;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthSession.RestoreAsync();
+        _initialized = true;
+    }
+}

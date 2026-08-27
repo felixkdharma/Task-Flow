@@ -1,0 +1,52 @@
+@inherits LayoutComponentBase
+@inject AuthSessionService AuthSession
+@inject NavigationManager Navigation
+
+<div class="project-app-shell">
+    <aside class="project-sidebar">
+        <a class="project-brand" href="/projects" aria-label="TaskFlow projects">
+            <span class="project-brand-mark">T</span>
+            <span>TaskFlow</span>
+        </a>
+
+        <nav class="project-navigation" aria-label="Primary navigation">
+            <span class="project-navigation-label">Workspace</span>
+            <NavLink class="project-navigation-link" href="/projects" Match="NavLinkMatch.Prefix">
+                <span class="project-navigation-icon" aria-hidden="true">□</span>
+                <span>Projects</span>
+            </NavLink>
+        </nav>
+
+        <div class="project-user">
+            <span class="project-user-avatar" aria-hidden="true">@UserInitials</span>
+            <div class="project-user-copy">
+                <strong>@DisplayName</strong>
+                <small>@AuthSession.CurrentUser?.Email</small>
+            </div>
+            <button type="button" class="project-logout" @onclick="LogoutAsync" aria-label="Log out">↗</button>
+        </div>
+    </aside>
+
+    <main class="project-main">
+        @Body
+    </main>
+</div>
+
+@code {
+    private string DisplayName => AuthSession.CurrentUser?.DisplayName ?? "TaskFlow user";
+
+    private string UserInitials
+    {
+        get
+        {
+            var words = DisplayName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return string.Concat(words.Take(2).Select(word => char.ToUpperInvariant(word[0])));
+        }
+    }
+
+    private async Task LogoutAsync()
+    {
+        await AuthSession.LogoutAsync();
+        Navigation.NavigateTo("/login", replace: true);
+    }
+}

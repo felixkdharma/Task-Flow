@@ -1,0 +1,110 @@
+@page "/register"
+@attribute [AllowAnonymous]
+@inject AuthSessionService AuthSession
+@inject NavigationManager Navigation
+
+<PageTitle>Create account | TaskFlow</PageTitle>
+
+<main class="auth-page">
+    <section class="auth-story register-story" aria-label="TaskFlow introduction">
+        <a class="brand" href="/" aria-label="TaskFlow home">
+            <span class="brand-mark">T</span><span>TaskFlow</span>
+        </a>
+        <div class="story-copy">
+            <span class="eyebrow">Start simply</span>
+            <h1>Turn big ideas into steady progress.</h1>
+            <p>Create your account and bring projects, priorities, and people together.</p>
+        </div>
+        <ul class="benefit-list">
+            <li><span>✓</span><div><strong>See the whole plan</strong><small>Keep every project and task in view.</small></div></li>
+            <li><span>✓</span><div><strong>Work as one team</strong><small>Make ownership and progress obvious.</small></div></li>
+            <li><span>✓</span><div><strong>Stay in motion</strong><small>Move work forward without the noise.</small></div></li>
+        </ul>
+    </section>
+
+    <section class="auth-panel register-panel">
+        <div class="auth-card register-card">
+            <div class="auth-heading">
+                <span class="mobile-brand"><span class="brand-mark small">T</span> TaskFlow</span>
+                <h2>Create your account</h2>
+                <p>Start organizing your team’s work today.</p>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <div class="form-alert" role="alert">@_error</div>
+            }
+
+            <EditForm Model="_model" OnValidSubmit="SubmitAsync" FormName="register-form">
+                <DataAnnotationsValidator />
+                <div class="field-group">
+                    <label for="register-name">Display name</label>
+                    <input id="register-name" @bind="_model.DisplayName" @bind:event="oninput"
+                           autocomplete="name" placeholder="Your name" />
+                    <ValidationMessage For="@(() => _model.DisplayName)" />
+                </div>
+                <div class="field-group">
+                    <label for="register-email">Email address</label>
+                    <input id="register-email" @bind="_model.Email" @bind:event="oninput" type="email"
+                           autocomplete="email" placeholder="you@company.com" />
+                    <ValidationMessage For="@(() => _model.Email)" />
+                </div>
+                <div class="field-group">
+                    <label for="register-password">Password</label>
+                    <div class="password-field">
+                        <input id="register-password" @bind="_model.Password" @bind:event="oninput"
+                               type="@(_showPassword ? "text" : "password")"
+                               autocomplete="new-password" placeholder="Create a strong password" />
+                        <button type="button" class="password-toggle" @onclick="TogglePassword"
+                                aria-label="@(_showPassword ? "Hide passwords" : "Show passwords")">
+                            @(_showPassword ? "Hide" : "Show")
+                        </button>
+                    </div>
+                    <ValidationMessage For="@(() => _model.Password)" />
+                    <small class="field-hint">8+ characters with uppercase, lowercase, number, and symbol.</small>
+                </div>
+                <div class="field-group">
+                    <label for="register-confirm">Confirm password</label>
+                    <input id="register-confirm" @bind="_model.ConfirmPassword" @bind:event="oninput"
+                           type="@(_showPassword ? "text" : "password")"
+                           autocomplete="new-password" placeholder="Repeat your password" />
+                    <ValidationMessage For="@(() => _model.ConfirmPassword)" />
+                </div>
+                <button class="primary-button" type="submit" disabled="@_submitting">
+                    @if (_submitting) { <span class="button-spinner"></span><span>Creating account…</span> }
+                    else { <span>Create account</span><span aria-hidden="true">→</span> }
+                </button>
+            </EditForm>
+
+            <p class="auth-switch">Already have an account? <a href="/login">Sign in</a></p>
+        </div>
+    </section>
+</main>
+
+@code {
+    private readonly RegisterFormModel _model = new();
+    private bool _showPassword;
+    private bool _submitting;
+    private string? _error;
+
+    protected override void OnInitialized()
+    {
+        if (AuthSession.IsAuthenticated) Navigation.NavigateTo("/projects", replace: true);
+    }
+
+    private void TogglePassword() => _showPassword = !_showPassword;
+
+    private async Task SubmitAsync()
+    {
+        _submitting = true;
+        _error = null;
+        try
+        {
+            await AuthSession.RegisterAsync(_model);
+            Navigation.NavigateTo("/projects", replace: true);
+        }
+        catch (AuthApiException exception) { _error = exception.Message; }
+        catch { _error = "TaskFlow could not connect to the server. Please try again."; }
+        finally { _submitting = false; }
+    }
+}

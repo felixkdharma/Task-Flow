@@ -1,0 +1,102 @@
+@page "/login"
+@attribute [AllowAnonymous]
+@inject AuthSessionService AuthSession
+@inject NavigationManager Navigation
+
+<PageTitle>Log in | TaskFlow</PageTitle>
+
+<main class="auth-page">
+    <section class="auth-story" aria-label="TaskFlow introduction">
+        <a class="brand" href="/" aria-label="TaskFlow home">
+            <span class="brand-mark">T</span><span>TaskFlow</span>
+        </a>
+        <div class="story-copy">
+            <span class="eyebrow">Move work forward</span>
+            <h1>One clear place for your team’s best work.</h1>
+            <p>Plan projects, organize tasks, and keep everyone moving in the same direction.</p>
+        </div>
+        <div class="workflow-preview" aria-hidden="true">
+            <div class="preview-head"><span>Product launch</span><span>•••</span></div>
+            <div class="preview-columns">
+                <div><small>TO DO</small><span></span><span></span></div>
+                <div><small>IN PROGRESS</small><span></span><span></span><span></span></div>
+                <div><small>DONE</small><span></span></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="auth-panel">
+        <div class="auth-card">
+            <div class="auth-heading">
+                <span class="mobile-brand"><span class="brand-mark small">T</span> TaskFlow</span>
+                <h2>Welcome back</h2>
+                <p>Enter your details to access your workspace.</p>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <div class="form-alert" role="alert">@_error</div>
+            }
+
+            <EditForm Model="_model" OnValidSubmit="SubmitAsync" FormName="login-form">
+                <DataAnnotationsValidator />
+                <div class="field-group">
+                    <label for="login-email">Email address</label>
+                    <input id="login-email" @bind="_model.Email" @bind:event="oninput" type="email"
+                           autocomplete="email" placeholder="you@company.com" />
+                    <ValidationMessage For="@(() => _model.Email)" />
+                </div>
+                <div class="field-group">
+                    <label for="login-password">Password</label>
+                    <div class="password-field">
+                        <input id="login-password" @bind="_model.Password" @bind:event="oninput"
+                               type="@(_showPassword ? "text" : "password")"
+                               autocomplete="current-password" placeholder="Enter your password" />
+                        <button type="button" class="password-toggle" @onclick="TogglePassword"
+                                aria-label="@(_showPassword ? "Hide password" : "Show password")">
+                            @(_showPassword ? "Hide" : "Show")
+                        </button>
+                    </div>
+                    <ValidationMessage For="@(() => _model.Password)" />
+                </div>
+                <button class="primary-button" type="submit" disabled="@_submitting">
+                    @if (_submitting) { <span class="button-spinner"></span><span>Signing in…</span> }
+                    else { <span>Sign in</span><span aria-hidden="true">→</span> }
+                </button>
+            </EditForm>
+
+            <p class="auth-switch">New to TaskFlow? <a href="/register">Create an account</a></p>
+        </div>
+    </section>
+</main>
+
+@code {
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+    private readonly LoginFormModel _model = new();
+    private bool _showPassword;
+    private bool _submitting;
+    private string? _error;
+
+    protected override void OnInitialized()
+    {
+        if (AuthSession.IsAuthenticated) Navigation.NavigateTo("/projects", replace: true);
+    }
+
+    private void TogglePassword() => _showPassword = !_showPassword;
+
+    private async Task SubmitAsync()
+    {
+        _submitting = true;
+        _error = null;
+        try
+        {
+            await AuthSession.LoginAsync(_model);
+            var destination = !string.IsNullOrWhiteSpace(ReturnUrl) && ReturnUrl.StartsWith('/') && !ReturnUrl.StartsWith("//")
+                ? ReturnUrl : "/projects";
+            Navigation.NavigateTo(destination, replace: true);
+        }
+        catch (AuthApiException exception) { _error = exception.Message; }
+        catch { _error = "TaskFlow could not connect to the server. Please try again."; }
+        finally { _submitting = false; }
+    }
+}
