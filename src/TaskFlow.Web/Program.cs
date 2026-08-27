@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using TaskFlow.Web;
 using TaskFlow.Web.Authentication;
 using TaskFlow.Web.Projects;
+using TaskFlow.Web.Workspaces;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
@@ -32,6 +33,7 @@ builder.Services.AddSingleton<AuthenticationStateProvider>(provider =>
 builder.Services.AddSingleton<AuthSessionService>();
 
 builder.Services.AddScoped<ProjectApiService>();
+builder.Services.AddScoped<WorkspaceApiService>();
 builder.Services.AddTransient<ApiAuthorizationHandler>();
 
 builder.Services.AddHttpClient(

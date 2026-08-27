@@ -14,6 +14,7 @@ public sealed class ApplicationDbContext(
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<Workspace> Workspaces => Set<Workspace>();
+    public DbSet<WorkBoard> WorkBoards => Set<WorkBoard>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

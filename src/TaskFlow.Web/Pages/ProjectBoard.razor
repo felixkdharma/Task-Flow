@@ -2,6 +2,8 @@
 @attribute [Authorize]
 @layout AppLayout
 @inject ProjectApiService ProjectApi
+@inject WorkspaceApiService WorkspaceApi
+@inject AuthSessionService AuthSession
 
 <PageTitle>@(_project?.ProjectName ?? "Project") | TaskFlow</PageTitle>
 
@@ -10,6 +12,7 @@
     <section class="project-page-content project-board-state" role="status">
         <span class="project-loading-spinner" aria-hidden="true"></span>
         <h1>Loading project</h1>
+        <p>Getting the project workspace ready.</p>
     </section>
 }
 else if (_notFound)
@@ -21,12 +24,12 @@ else if (_notFound)
         <a class="project-primary-button" href="/projects">Back to projects</a>
     </section>
 }
-else if (!string.IsNullOrWhiteSpace(_error))
+else if (!string.IsNullOrWhiteSpace(_loadError))
 {
     <section class="project-page-content project-board-state" role="alert">
         <span class="project-state-icon" aria-hidden="true">!</span>
-        <h1>Project could not be loaded</h1>
-        <p>@_error</p>
+        <h1>@_loadErrorTitle</h1>
+        <p>@_loadError</p>
         <button type="button" class="project-secondary-button" @onclick="LoadProjectAsync">Try again</button>
     </section>
 }
@@ -42,20 +45,127 @@ else if (_project is not null)
     </header>
 
     <section class="project-page-content">
-        <div class="kanban-board" aria-label="Empty project workflow">
-            @foreach (var column in Columns)
-            {
-                <section class="kanban-column">
-                    <header><h2>@column</h2><span>0</span></header>
-                    <div class="kanban-empty-column">
-                        <span aria-hidden="true">＋</span>
-                        <p>No tasks yet</p>
-                        <small>Task management will be added in a future milestone.</small>
-                    </div>
-                </section>
-            }
-        </div>
+        @if (_workspace is null)
+        {
+            <div class="project-state-panel workspace-empty-state">
+                <span class="project-state-icon" aria-hidden="true">◇</span>
+                <span class="eyebrow">Project workspace</span>
+                <h2>Create a workspace</h2>
+                <p>This project needs a workspace before its Kanban board can be used.</p>
+                <button type="button" class="project-primary-button" @onclick="OpenCreateWorkspace">
+                    <span aria-hidden="true">＋</span> Create workspace
+                </button>
+            </div>
+        }
+        else
+        {
+            <section class="workspace-summary" aria-labelledby="workspace-title">
+                <div class="workspace-summary-mark" aria-hidden="true">@WorkspaceInitial</div>
+                <div class="workspace-summary-copy">
+                    <span class="eyebrow">Workspace</span>
+                    <h2 id="workspace-title">@_workspace.WorkspaceName</h2>
+                    <p>@WorkspaceDescription</p>
+                </div>
+                <div class="workspace-summary-actions">
+                    <button type="button" class="project-secondary-button" @onclick="OpenEditWorkspace">Edit</button>
+                    <button type="button" class="workspace-delete-button" @onclick="OpenDeleteWorkspace">Delete</button>
+                </div>
+            </section>
+
+            <div class="kanban-board workspace-kanban" aria-label="@($"{_workspace.WorkspaceName} workflow")">
+                @foreach (var column in Columns)
+                {
+                    <section class="kanban-column">
+                        <header><h2>@column</h2><span>0</span></header>
+                        <div class="kanban-empty-column">
+                            <span aria-hidden="true">＋</span>
+                            <p>No tasks yet</p>
+                            <small>Task management will be added in a future milestone.</small>
+                        </div>
+                    </section>
+                }
+            </div>
+        }
     </section>
+}
+
+@if (_showWorkspaceForm)
+{
+    <div class="project-modal-backdrop" @onclick="CloseWorkspaceForm">
+        <section class="project-modal" role="dialog" aria-modal="true" aria-labelledby="workspace-form-title" @onclick:stopPropagation="true">
+            <header class="project-modal-header">
+                <div>
+                    <span class="eyebrow">@(_editingWorkspace ? "Workspace settings" : "New workspace")</span>
+                    <h2 id="workspace-form-title">@(_editingWorkspace ? "Edit workspace" : "Create a workspace")</h2>
+                </div>
+                <button type="button" class="project-modal-close" @onclick="CloseWorkspaceForm" aria-label="Close">×</button>
+            </header>
+
+            @if (!string.IsNullOrWhiteSpace(_formError))
+            {
+                <div class="project-form-alert" role="alert">@_formError</div>
+            }
+
+            <EditForm Model="_workspaceForm" OnValidSubmit="SaveWorkspaceAsync" FormName="workspace-form">
+                <DataAnnotationsValidator />
+                <div class="project-field">
+                    <label for="workspace-name">Workspace name</label>
+                    <input id="workspace-name" @bind="_workspaceForm.WorkspaceName" @bind:event="oninput"
+                           maxlength="100" autocomplete="off" placeholder="Main workspace" autofocus />
+                    <ValidationMessage For="@(() => _workspaceForm.WorkspaceName)" />
+                </div>
+                <div class="project-field">
+                    <label for="workspace-description">Description <span class="project-optional-label">Optional</span></label>
+                    <textarea id="workspace-description" @bind="_workspaceForm.WorkspaceDescription" @bind:event="oninput"
+                              rows="5" placeholder="What will your team manage here?"></textarea>
+                </div>
+                <footer class="project-modal-actions">
+                    <button type="button" class="project-secondary-button" @onclick="CloseWorkspaceForm" disabled="@_submitting">Cancel</button>
+                    <button type="submit" class="project-primary-button" disabled="@_submitting">
+                        @if (_submitting)
+                        {
+                            <span class="button-spinner"></span><span>Saving…</span>
+                        }
+                        else
+                        {
+                            <span>@(_editingWorkspace ? "Save changes" : "Create workspace")</span>
+                        }
+                    </button>
+                </footer>
+            </EditForm>
+        </section>
+    </div>
+}
+
+@if (_showDeleteWorkspace && _workspace is not null)
+{
+    <div class="project-modal-backdrop" @onclick="CloseDeleteWorkspace">
+        <section class="project-modal workspace-delete-modal" role="alertdialog" aria-modal="true"
+                 aria-labelledby="delete-workspace-title" aria-describedby="delete-workspace-description" @onclick:stopPropagation="true">
+            <header class="project-modal-header">
+                <div><span class="eyebrow">Delete workspace</span><h2 id="delete-workspace-title">Delete @_workspace.WorkspaceName?</h2></div>
+                <button type="button" class="project-modal-close" @onclick="CloseDeleteWorkspace" aria-label="Close">×</button>
+            </header>
+            <p id="delete-workspace-description">This removes the workspace from the project. This action cannot be undone.</p>
+            @if (!string.IsNullOrWhiteSpace(_deleteError))
+            {
+                <div class="project-form-alert" role="alert">@_deleteError</div>
+            }
+            <footer class="project-modal-actions">
+                <button type="button" class="project-secondary-button" @onclick="CloseDeleteWorkspace" disabled="@_submitting">Cancel</button>
+                <button type="button" class="workspace-danger-button" @onclick="DeleteWorkspaceAsync" disabled="@_submitting">
+                    @if (_submitting)
+                    {
+                        <span class="button-spinner"></span><span>Deleting…</span>
+                    }
+                    else
+                    {
+                        <span>Delete workspace</span>
+                    }
+                </button>
+            </footer>
+        </section>
+    </div>
 }
 
 @code {
@@ -63,9 +173,26 @@ else if (_project is not null)
 
     private static readonly string[] Columns = ["Backlog", "To do", "In progress", "Done"];
     private ProjectResponse? _project;
+    private WorkspaceResponse? _workspace;
+    private WorkspaceFormModel _workspaceForm = new();
     private bool _loading = true;
     private bool _notFound;
-    private string? _error;
+    private bool _showWorkspaceForm;
+    private bool _showDeleteWorkspace;
+    private bool _editingWorkspace;
+    private bool _submitting;
+    private string _loadErrorTitle = "Project could not be loaded";
+    private string? _loadError;
+    private string? _formError;
+    private string? _deleteError;
+
+    private string WorkspaceDescription => string.IsNullOrWhiteSpace(_workspace?.WorkspaceDescription)
+        ? "No description has been added yet."
+        : _workspace.WorkspaceDescription;
+
+    private string WorkspaceInitial => string.IsNullOrWhiteSpace(_workspace?.WorkspaceName)
+        ? "W"
+        : char.ToUpperInvariant(_workspace.WorkspaceName.Trim()[0]).ToString();
 
     protected override Task OnParametersSetAsync() => LoadProjectAsync();
 
@@ -73,23 +200,160 @@ else if (_project is not null)
     {
         _loading = true;
         _notFound = false;
-        _error = null;
+        _loadError = null;
+        _loadErrorTitle = "Project could not be loaded";
         try
         {
             _project = await ProjectApi.GetProjectAsync(Id);
             _notFound = _project is null;
+            if (_notFound)
+            {
+                _workspace = null;
+                return;
+            }
+
+            var workspaces = await WorkspaceApi.GetWorkspacesAsync(Id);
+            _workspace = workspaces.FirstOrDefault();
         }
         catch (ProjectApiException exception)
         {
-            _error = exception.Message;
+            SetLoadError(exception.StatusCode, exception.Message);
+        }
+        catch (WorkspaceApiException exception)
+        {
+            SetLoadError(exception.StatusCode, exception.Message, "Workspace could not be loaded");
         }
         catch
         {
-            _error = "TaskFlow could not connect to the server. Please try again.";
+            _loadError = "TaskFlow could not connect to the server. Please try again.";
         }
         finally
         {
             _loading = false;
+        }
+    }
+
+    private void SetLoadError(int statusCode, string message, string defaultTitle = "Project could not be loaded")
+    {
+        _loadErrorTitle = statusCode == 401 ? "Your session has expired" : defaultTitle;
+        _loadError = statusCode == 401 ? "Sign in again to continue working in TaskFlow." : message;
+    }
+
+    private void OpenCreateWorkspace()
+    {
+        _editingWorkspace = false;
+        _workspaceForm = new WorkspaceFormModel();
+        _formError = null;
+        _showWorkspaceForm = true;
+    }
+
+    private void OpenEditWorkspace()
+    {
+        if (_workspace is null)
+        {
+            return;
+        }
+
+        _editingWorkspace = true;
+        _workspaceForm = new WorkspaceFormModel
+        {
+            WorkspaceName = _workspace.WorkspaceName,
+            WorkspaceDescription = _workspace.WorkspaceDescription ?? string.Empty
+        };
+        _formError = null;
+        _showWorkspaceForm = true;
+    }
+
+    private void CloseWorkspaceForm()
+    {
+        if (!_submitting)
+        {
+            _showWorkspaceForm = false;
+        }
+    }
+
+    private async Task SaveWorkspaceAsync()
+    {
+        var user = AuthSession.CurrentUser;
+        if (user is null)
+        {
+            _formError = "Your session has expired. Sign in again to continue.";
+            return;
+        }
+
+        _submitting = true;
+        _formError = null;
+        try
+        {
+            _workspace = _editingWorkspace && _workspace is not null
+                ? await WorkspaceApi.UpdateWorkspaceAsync(_workspace.WorkspaceId, Id, user.Id, _workspaceForm)
+                : await WorkspaceApi.CreateWorkspaceAsync(Id, user.Id, _workspaceForm);
+            _showWorkspaceForm = false;
+        }
+        catch (WorkspaceApiException exception)
+        {
+            _formError = exception.StatusCode == 401
+                ? "Your session has expired. Sign in again to continue."
+                : exception.Message;
+        }
+        catch
+        {
+            _formError = "TaskFlow could not connect to the server. Please try again.";
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+
+    private void OpenDeleteWorkspace()
+    {
+        _deleteError = null;
+        _showDeleteWorkspace = true;
+    }
+
+    private void CloseDeleteWorkspace()
+    {
+        if (!_submitting)
+        {
+            _showDeleteWorkspace = false;
+        }
+    }
+
+    private async Task DeleteWorkspaceAsync()
+    {
+        if (_workspace is null)
+        {
+            return;
+        }
+
+        _submitting = true;
+        _deleteError = null;
+        try
+        {
+            var deleted = await WorkspaceApi.DeleteWorkspaceAsync(Id, _workspace.WorkspaceId);
+            if (!deleted)
+            {
+                _deleteError = "This workspace no longer exists. Reload the project and try again.";
+                return;
+            }
+
+            _workspace = null;
+            _showDeleteWorkspace = false;
+        }
+        catch (WorkspaceApiException exception)
+        {
+            _deleteError = exception.StatusCode == 401
+                ? "Your session has expired. Sign in again to continue."
+                : exception.Message;
+        }
+        catch
+        {
+            _deleteError = "TaskFlow could not connect to the server. Please try again.";
+        }
+        finally
+        {
+            _submitting = false;
         }
     }
 }
