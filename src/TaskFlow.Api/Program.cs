@@ -7,8 +7,10 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Scalar.AspNetCore;
 using TaskFlow.Application.Project.Interfaces;
+using TaskFlow.Application.Workboard.Interfaces;
 using TaskFlow.Application.Workspace.Interfaces;
 using TaskFlow.Infrastructure.Project;
+using TaskFlow.Infrastructure.WorkBoard;
 using TaskFlow.Infrastructure.Workspace;
 using TaskFlow.src.Application.Authentication.Interfaces;
 using TaskFlow.src.Infrastructure.Authentication;
@@ -125,6 +127,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddSingleton<ITokenService, TokenService>();
 builder.Services.AddScoped<IProjectService, ProjectService>();
 builder.Services.AddScoped<IWorkspaceService, WorkspaceService>();
+builder.Services.AddScoped<IWorkBoardService, WorkBoardService>();
 
 var app = builder.Build();
 
