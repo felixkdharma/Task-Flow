@@ -1,12 +1,11 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace TaskFlow.Application.Workboard.Contracts
 {
-    public sealed record WorkboardRequest
+    public sealed record WorkBoardDetailsUpdateRequest
     (
         [Required, MaxLength(200)] string WorkBoardName,
         [MaxLength(200)] string? WorkBoardDescription,
-        int WorkBoardStatus,
         DateTime StartDate,
         DateTime EndDate,
         Guid ProjectId,
