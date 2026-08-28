@@ -3,6 +3,7 @@
 @layout AppLayout
 @inject ProjectApiService ProjectApi
 @inject WorkspaceApiService WorkspaceApi
+@inject WorkBoardApiService WorkBoardApi
 @inject AuthSessionService AuthSession
 
 <PageTitle>@(_project?.ProjectName ?? "Project") | TaskFlow</PageTitle>
@@ -41,7 +42,7 @@ else if (_project is not null)
             <h1>@_project.ProjectName</h1>
             <p>@_project.Description</p>
         </div>
-        <span class="project-coming-soon">Task workflow coming later</span>
+        <span class="project-coming-soon">Four-stage workflow</span>
     </header>
 
     <section class="project-page-content">
@@ -72,15 +73,73 @@ else if (_project is not null)
                 </div>
             </section>
 
-            <div class="kanban-board workspace-kanban" aria-label="@($"{_workspace.WorkspaceName} workflow")">
+            @if (!string.IsNullOrWhiteSpace(_workBoardLoadError))
+            {
+                <div class="workboard-alert" role="alert">
+                    <span>@_workBoardLoadError</span>
+                    <button type="button" @onclick="LoadWorkBoardsAsync">Try again</button>
+                </div>
+            }
+            else if (!string.IsNullOrWhiteSpace(_workBoardOperationError))
+            {
+                <div class="workboard-alert" role="alert">
+                    <span>@_workBoardOperationError</span>
+                    <button type="button" @onclick="ClearWorkBoardError" aria-label="Dismiss">×</button>
+                </div>
+            }
+
+            <div class="kanban-board workspace-kanban" aria-label="@($"{_workspace.WorkspaceName} workflow")" aria-busy="@_workBoardsLoading">
                 @foreach (var column in Columns)
                 {
-                    <section class="kanban-column">
-                        <header><h2>@column</h2><span>0</span></header>
-                        <div class="kanban-empty-column">
-                            <span aria-hidden="true">＋</span>
-                            <p>No tasks yet</p>
-                            <small>Task management will be added in a future milestone.</small>
+                    var cards = CardsFor(column.Status).ToList();
+                    <section class="kanban-column @(_draggedWorkBoardId.HasValue ? "kanban-drop-ready" : null)" data-kanban-column="@column.Status"
+                             @ondragover:preventDefault="true" @ondrop="@(() => DropWorkBoardAsync(column.Status))">
+                        <header>
+                            <div><h2>@column.Name</h2><span>@cards.Count</span></div>
+                            <button type="button" class="kanban-add-button" @onclick="@(() => OpenCreateWorkBoard(column.Status))">
+                                <span aria-hidden="true">＋</span> Add
+                            </button>
+                        </header>
+                        <div class="kanban-column-body">
+                            @if (_workBoardsLoading)
+                            {
+                                <div class="kanban-column-loading"><span class="project-loading-spinner"></span></div>
+                            }
+                            else if (cards.Count == 0)
+                            {
+                                <div class="kanban-empty-column">
+                                    <span aria-hidden="true">＋</span>
+                                    <p>No workboards yet</p>
+                                    <small>Add a workboard here or drag one into this column.</small>
+                                </div>
+                            }
+                            else
+                            {
+                                @foreach (var card in cards)
+                                {
+                                    <article @key="card.WorkBoardId"
+                                             class="kanban-card @(_movingWorkBoards.Contains(card.WorkBoardId) ? "is-moving" : null)"
+                                             draggable="@(_movingWorkBoards.Contains(card.WorkBoardId) ? "false" : "true")"
+                                             data-workboard-card data-workboard-id="@card.WorkBoardId"
+                                             aria-label="@($"{card.WorkBoardName} workboard")"
+                                             aria-disabled="@(_movingWorkBoards.Contains(card.WorkBoardId) ? "true" : "false")"
+                                             @ondragstart="@(() => BeginDrag(card))" @ondragend="EndDrag">
+                                        <div class="kanban-card-header">
+                                            <strong>@card.WorkBoardName</strong>
+                                            <button type="button" class="kanban-card-edit"
+                                                    @onclick="@(() => OpenEditWorkBoard(card))"
+                                                    disabled="@_movingWorkBoards.Contains(card.WorkBoardId)">
+                                                Edit
+                                            </button>
+                                        </div>
+                                        <span class="kanban-card-description">@CardDescription(card)</span>
+                                        <span class="kanban-card-dates">
+                                            <span aria-hidden="true">◷</span>
+                                            @FormatDateRange(card)
+                                        </span>
+                                    </article>
+                                }
+                            }
                         </div>
                     </section>
                 }
@@ -168,23 +227,106 @@ else if (_project is not null)
     </div>
 }
 
+@if (_showWorkBoardForm && _workspace is not null)
+{
+    <div class="project-modal-backdrop" @onclick="CloseWorkBoardForm">
+        <section class="project-modal" role="dialog" aria-modal="true" aria-labelledby="workboard-form-title" @onclick:stopPropagation="true">
+            <header class="project-modal-header">
+                <div>
+                    <span class="eyebrow">@(_editingWorkBoardId.HasValue ? "Workboard details" : ColumnName(_workBoardFormStatus))</span>
+                    <h2 id="workboard-form-title">@(_editingWorkBoardId.HasValue ? "Edit workboard" : "Add workboard")</h2>
+                </div>
+                <button type="button" class="project-modal-close" @onclick="CloseWorkBoardForm" aria-label="Close">×</button>
+            </header>
+
+            @if (!string.IsNullOrWhiteSpace(_workBoardFormError))
+            {
+                <div class="project-form-alert" role="alert">@_workBoardFormError</div>
+            }
+
+            <EditForm Model="_workBoardForm" OnValidSubmit="SaveWorkBoardAsync" FormName="workboard-form">
+                <DataAnnotationsValidator />
+                <div class="project-field">
+                    <label for="workboard-name">Workboard name</label>
+                    <input id="workboard-name" @bind="_workBoardForm.WorkBoardName" @bind:event="oninput"
+                           maxlength="200" autocomplete="off" placeholder="Prepare release notes" autofocus />
+                    <ValidationMessage For="@(() => _workBoardForm.WorkBoardName)" />
+                </div>
+                <div class="project-field">
+                    <label for="workboard-description">Description <span class="project-optional-label">Optional</span></label>
+                    <textarea id="workboard-description" @bind="_workBoardForm.WorkBoardDescription" @bind:event="oninput"
+                              maxlength="200" rows="4" placeholder="Add context for this workboard."></textarea>
+                    <div class="project-field-footer">
+                        <ValidationMessage For="@(() => _workBoardForm.WorkBoardDescription)" />
+                        <small>@_workBoardForm.WorkBoardDescription.Length / 200</small>
+                    </div>
+                </div>
+                <div class="workboard-date-grid">
+                    <div class="project-field">
+                        <label for="workboard-start-date">Start date</label>
+                        <InputDate id="workboard-start-date" @bind-Value="_workBoardForm.StartDate" />
+                        <ValidationMessage For="@(() => _workBoardForm.StartDate)" />
+                    </div>
+                    <div class="project-field">
+                        <label for="workboard-end-date">End date</label>
+                        <InputDate id="workboard-end-date" @bind-Value="_workBoardForm.EndDate" />
+                        <ValidationMessage For="@(() => _workBoardForm.EndDate)" />
+                    </div>
+                </div>
+                <footer class="project-modal-actions">
+                    <button type="button" class="project-secondary-button" @onclick="CloseWorkBoardForm" disabled="@_workBoardSubmitting">Cancel</button>
+                    <button type="submit" class="project-primary-button" disabled="@_workBoardSubmitting">
+                        @if (_workBoardSubmitting)
+                        {
+                            <span class="button-spinner"></span><span>Saving…</span>
+                        }
+                        else
+                        {
+                            <span>@(_editingWorkBoardId.HasValue ? "Save changes" : $"Add to {ColumnName(_workBoardFormStatus)}")</span>
+                        }
+                    </button>
+                </footer>
+            </EditForm>
+        </section>
+    </div>
+}
+
 @code {
     [Parameter] public Guid Id { get; set; }
 
-    private static readonly string[] Columns = ["Backlog", "To do", "In progress", "Done"];
+    private static readonly WorkBoardColumn[] Columns =
+    [
+        new("Backlog", 99),
+        new("To do", 1),
+        new("In progress", 2),
+        new("Complete", 100)
+    ];
+    private static readonly HashSet<int> KnownStatuses = Columns.Select(column => column.Status).ToHashSet();
     private ProjectResponse? _project;
     private WorkspaceResponse? _workspace;
+    private List<WorkBoardResponse> _workBoards = [];
     private WorkspaceFormModel _workspaceForm = new();
+    private WorkBoardFormModel _workBoardForm = new();
+    private readonly HashSet<Guid> _movingWorkBoards = [];
     private bool _loading = true;
     private bool _notFound;
     private bool _showWorkspaceForm;
     private bool _showDeleteWorkspace;
+    private bool _showWorkBoardForm;
     private bool _editingWorkspace;
     private bool _submitting;
+    private bool _workBoardsLoading;
+    private bool _workBoardSubmitting;
+    private Guid? _editingWorkBoardId;
+    private Guid? _draggedWorkBoardId;
+    private int _workBoardFormStatus = 99;
     private string _loadErrorTitle = "Project could not be loaded";
     private string? _loadError;
     private string? _formError;
     private string? _deleteError;
+    private string? _workBoardLoadError;
+    private string? _workBoardOperationError;
+    private string? _workBoardFormError;
 
     private string WorkspaceDescription => string.IsNullOrWhiteSpace(_workspace?.WorkspaceDescription)
         ? "No description has been added yet."
@@ -202,6 +344,9 @@ else if (_project is not null)
         _notFound = false;
         _loadError = null;
         _loadErrorTitle = "Project could not be loaded";
+        _workBoards = [];
+        _workBoardLoadError = null;
+        _workBoardOperationError = null;
         try
         {
             _project = await ProjectApi.GetProjectAsync(Id);
@@ -214,6 +359,10 @@ else if (_project is not null)
 
             var workspaces = await WorkspaceApi.GetWorkspacesAsync(Id);
             _workspace = workspaces.FirstOrDefault();
+            if (_workspace is not null)
+            {
+                await LoadWorkBoardsAsync();
+            }
         }
         catch (ProjectApiException exception)
         {
@@ -230,6 +379,39 @@ else if (_project is not null)
         finally
         {
             _loading = false;
+        }
+    }
+
+    private async Task LoadWorkBoardsAsync()
+    {
+        if (_workspace is null)
+        {
+            _workBoards = [];
+            return;
+        }
+
+        _workBoardsLoading = true;
+        _workBoardLoadError = null;
+        try
+        {
+            _workBoards = (await WorkBoardApi.GetWorkBoardsAsync(Id, _workspace.WorkspaceId)).ToList();
+            SortWorkBoards();
+            if (_workBoards.Any(workBoard => !KnownStatuses.Contains(workBoard.WorkBoardStatus)))
+            {
+                _workBoardOperationError = "Some older workboards had an unknown status and are shown in Backlog. Move them to save a valid status.";
+            }
+        }
+        catch (WorkBoardApiException exception)
+        {
+            _workBoardLoadError = WorkBoardErrorMessage(exception);
+        }
+        catch
+        {
+            _workBoardLoadError = "TaskFlow could not load the workboards. Please try again.";
+        }
+        finally
+        {
+            _workBoardsLoading = false;
         }
     }
 
@@ -288,6 +470,12 @@ else if (_project is not null)
             _workspace = _editingWorkspace && _workspace is not null
                 ? await WorkspaceApi.UpdateWorkspaceAsync(_workspace.WorkspaceId, Id, user.Id, _workspaceForm)
                 : await WorkspaceApi.CreateWorkspaceAsync(Id, user.Id, _workspaceForm);
+            if (!_editingWorkspace)
+            {
+                _workBoards = [];
+                _workBoardLoadError = null;
+                _workBoardOperationError = null;
+            }
             _showWorkspaceForm = false;
         }
         catch (WorkspaceApiException exception)
@@ -339,6 +527,7 @@ else if (_project is not null)
             }
 
             _workspace = null;
+            _workBoards = [];
             _showDeleteWorkspace = false;
         }
         catch (WorkspaceApiException exception)
@@ -356,4 +545,200 @@ else if (_project is not null)
             _submitting = false;
         }
     }
+
+    private IEnumerable<WorkBoardResponse> CardsFor(int status)
+    {
+        return status == 99
+            ? _workBoards.Where(workBoard => workBoard.WorkBoardStatus == status || !KnownStatuses.Contains(workBoard.WorkBoardStatus))
+            : _workBoards.Where(workBoard => workBoard.WorkBoardStatus == status);
+    }
+
+    private void OpenCreateWorkBoard(int status)
+    {
+        _editingWorkBoardId = null;
+        _workBoardFormStatus = status;
+        _workBoardForm = new WorkBoardFormModel();
+        _workBoardFormError = null;
+        _showWorkBoardForm = true;
+    }
+
+    private void OpenEditWorkBoard(WorkBoardResponse workBoard)
+    {
+        if (_movingWorkBoards.Contains(workBoard.WorkBoardId))
+        {
+            return;
+        }
+
+        _editingWorkBoardId = workBoard.WorkBoardId;
+        _workBoardFormStatus = KnownStatuses.Contains(workBoard.WorkBoardStatus) ? workBoard.WorkBoardStatus : 99;
+        _workBoardForm = new WorkBoardFormModel
+        {
+            WorkBoardName = workBoard.WorkBoardName,
+            WorkBoardDescription = workBoard.WorkBoardDescription ?? string.Empty,
+            StartDate = workBoard.StartDate.Date,
+            EndDate = workBoard.EndDate.Date
+        };
+        _workBoardFormError = null;
+        _showWorkBoardForm = true;
+    }
+
+    private void CloseWorkBoardForm()
+    {
+        if (!_workBoardSubmitting)
+        {
+            _showWorkBoardForm = false;
+        }
+    }
+
+    private async Task SaveWorkBoardAsync()
+    {
+        if (_workspace is null)
+        {
+            _workBoardFormError = "The workspace is no longer available. Reload the project and try again.";
+            return;
+        }
+
+        _workBoardSubmitting = true;
+        _workBoardFormError = null;
+        try
+        {
+            if (_editingWorkBoardId is Guid workBoardId)
+            {
+                var updated = await WorkBoardApi.UpdateWorkBoardAsync(
+                    workBoardId,
+                    Id,
+                    _workspace.WorkspaceId,
+                    _workBoardForm);
+                ReplaceWorkBoard(updated);
+            }
+            else
+            {
+                var created = await WorkBoardApi.CreateWorkBoardAsync(
+                    Id,
+                    _workspace.WorkspaceId,
+                    _workBoardFormStatus,
+                    _workBoardForm);
+                _workBoards.Add(created);
+            }
+
+            SortWorkBoards();
+            _showWorkBoardForm = false;
+            _workBoardOperationError = null;
+        }
+        catch (WorkBoardApiException exception)
+        {
+            _workBoardFormError = WorkBoardErrorMessage(exception);
+        }
+        catch
+        {
+            _workBoardFormError = "TaskFlow could not save the workboard. Please try again.";
+        }
+        finally
+        {
+            _workBoardSubmitting = false;
+        }
+    }
+
+    private void BeginDrag(WorkBoardResponse workBoard)
+    {
+        if (!_movingWorkBoards.Contains(workBoard.WorkBoardId))
+        {
+            _draggedWorkBoardId = workBoard.WorkBoardId;
+            _workBoardOperationError = null;
+        }
+    }
+
+    private void EndDrag()
+    {
+        _draggedWorkBoardId = null;
+    }
+
+    private async Task DropWorkBoardAsync(int status)
+    {
+        if (_workspace is null || _draggedWorkBoardId is not Guid workBoardId)
+        {
+            return;
+        }
+
+        _draggedWorkBoardId = null;
+        var index = _workBoards.FindIndex(workBoard => workBoard.WorkBoardId == workBoardId);
+        if (index < 0 || _movingWorkBoards.Contains(workBoardId))
+        {
+            return;
+        }
+
+        var original = _workBoards[index];
+        if (original.WorkBoardStatus == status)
+        {
+            return;
+        }
+
+        _movingWorkBoards.Add(workBoardId);
+        _workBoards[index] = original with { WorkBoardStatus = status };
+        _workBoardOperationError = null;
+        try
+        {
+            var savedStatus = await WorkBoardApi.UpdateStatusAsync(
+                workBoardId,
+                Id,
+                _workspace.WorkspaceId,
+                status);
+            _workBoards[index] = _workBoards[index] with { WorkBoardStatus = savedStatus };
+            SortWorkBoards();
+        }
+        catch (WorkBoardApiException exception)
+        {
+            ReplaceWorkBoard(original);
+            _workBoardOperationError = $"{original.WorkBoardName} was returned to {ColumnName(original.WorkBoardStatus)}. {WorkBoardErrorMessage(exception)}";
+        }
+        catch
+        {
+            ReplaceWorkBoard(original);
+            _workBoardOperationError = $"{original.WorkBoardName} was returned to {ColumnName(original.WorkBoardStatus)} because TaskFlow could not save the move.";
+        }
+        finally
+        {
+            _movingWorkBoards.Remove(workBoardId);
+        }
+    }
+
+    private void ReplaceWorkBoard(WorkBoardResponse workBoard)
+    {
+        var index = _workBoards.FindIndex(item => item.WorkBoardId == workBoard.WorkBoardId);
+        if (index >= 0)
+        {
+            _workBoards[index] = workBoard;
+        }
+    }
+
+    private void SortWorkBoards()
+    {
+        _workBoards = _workBoards
+            .OrderBy(workBoard => workBoard.WorkBoardName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private void ClearWorkBoardError() => _workBoardOperationError = null;
+
+    private static string ColumnName(int status) =>
+        Columns.FirstOrDefault(column => column.Status == status)?.Name ?? "Backlog";
+
+    private static string CardDescription(WorkBoardResponse workBoard) =>
+        string.IsNullOrWhiteSpace(workBoard.WorkBoardDescription)
+            ? "No description"
+            : workBoard.WorkBoardDescription;
+
+    private static string FormatDateRange(WorkBoardResponse workBoard) =>
+        workBoard.StartDate.Date == workBoard.EndDate.Date
+            ? workBoard.StartDate.ToString("MMM d, yyyy")
+            : $"{workBoard.StartDate:MMM d} – {workBoard.EndDate:MMM d, yyyy}";
+
+    private static string WorkBoardErrorMessage(WorkBoardApiException exception) => exception.StatusCode switch
+    {
+        401 => "Your session has expired. Sign in again to continue.",
+        404 => "This workboard is no longer available to your account.",
+        _ => exception.Message
+    };
+
+    private sealed record WorkBoardColumn(string Name, int Status);
 }

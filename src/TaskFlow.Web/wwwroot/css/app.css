@@ -221,15 +221,41 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .workspace-danger-button:disabled { cursor: not-allowed; opacity: .62; }
 .workspace-delete-modal > p { margin: -5px 0 24px; color: var(--muted); line-height: 1.6; }
 .workspace-kanban { margin-top: 28px; }
+.workboard-alert { margin-top: 18px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 18px; color: #8c3030; background: #fff1f0; border: 1px solid #ffd2ce; border-radius: 9px; font-size: 13px; line-height: 1.45; }
+.workboard-alert button { flex: none; padding: 4px 7px; color: #8c3030; background: transparent; border: 0; border-radius: 5px; cursor: pointer; font-weight: 700; }
+.workboard-alert button:hover { background: #ffe1de; }
 .kanban-board { display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 13px; }
-.kanban-column { min-width: 0; }
-.kanban-column > header { padding: 0 4px 10px; display: flex; align-items: center; justify-content: space-between; }
+.kanban-column { min-width: 0; padding: 8px; border: 1px solid transparent; border-radius: 14px; transition: background .15s, border-color .15s; }
+.kanban-column.kanban-drop-ready { background: rgba(118,224,207,.07); border-color: rgba(76,122,125,.18); }
+.kanban-column.is-drag-over { background: rgba(118,224,207,.18); border-color: #4c7a7d; box-shadow: inset 0 0 0 2px rgba(76,122,125,.12); }
+.kanban-column > header { min-height: 42px; padding: 0 2px 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.kanban-column > header > div { min-width: 0; display: flex; align-items: center; gap: 7px; }
 .kanban-column h2 { margin: 0; color: #35434c; font-size: 14px; font-weight: 700; }
-.kanban-column header span { min-width: 24px; height: 24px; display: grid; place-items: center; color: #718089; background: #e7ecee; border-radius: 7px; font-size: 11px; }
-.kanban-empty-column { min-height: 325px; padding: 28px 18px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #9aa6ad; background: rgba(255,255,255,.46); border: 1px dashed #ced7db; border-radius: 12px; text-align: center; }
+.kanban-column > header > div > span { min-width: 24px; height: 24px; display: grid; place-items: center; color: #718089; background: #e7ecee; border-radius: 7px; font-size: 11px; }
+.kanban-add-button { min-height: 32px; padding: 0 9px; display: inline-flex; align-items: center; gap: 3px; color: #4c5c65; background: white; border: 1px solid var(--line); border-radius: 7px; cursor: pointer; font-size: 11px; font-weight: 700; }
+.kanban-add-button:hover { color: var(--ink); background: #f3f6f6; border-color: #c3ced2; }
+.kanban-column-body { min-height: 325px; padding: 8px; display: flex; flex-direction: column; gap: 9px; background: rgba(255,255,255,.46); border: 1px dashed #ced7db; border-radius: 12px; }
+.kanban-column-loading { min-height: 307px; display: grid; place-items: center; }
+.kanban-card { width: 100%; padding: 15px; display: block; color: inherit; background: white; border: 1px solid #e0e6e8; border-radius: 10px; box-shadow: 0 3px 10px rgba(20,33,43,.045); cursor: grab; text-align: left; user-select: none; transition: transform .15s, border-color .15s, box-shadow .15s, opacity .15s; }
+.kanban-card:hover { transform: translateY(-1px); border-color: #bdc9ce; box-shadow: 0 7px 18px rgba(20,33,43,.08); }
+.kanban-card:active { cursor: grabbing; }
+.kanban-card.is-dragging { opacity: .42; cursor: grabbing; }
+.kanban-card.is-moving { opacity: .58; cursor: wait; }
+.kanban-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.kanban-card-header strong { min-width: 0; flex: 1; }
+.kanban-card-edit { flex: none; margin: -5px -6px 0 0; padding: 5px 6px; color: #687780; background: transparent; border: 0; border-radius: 6px; cursor: pointer; font-size: 10px; font-weight: 700; }
+.kanban-card-edit:not(:disabled):hover { color: var(--ink); background: #eef2f3; }
+.kanban-card-edit:focus-visible { outline: 3px solid rgba(76,122,125,.22); outline-offset: 1px; }
+.kanban-card-edit:disabled { cursor: wait; opacity: .6; }
+.kanban-card strong, .kanban-card-description, .kanban-card-dates { display: block; }
+.kanban-card strong { overflow-wrap: anywhere; color: var(--ink); font: 700 14px/1.35 "Manrope", sans-serif; }
+.kanban-card-description { display: -webkit-box; overflow: hidden; margin-top: 7px; color: var(--muted); font-size: 12px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.kanban-card-dates { margin-top: 13px; color: #74828a; font-size: 10px; font-weight: 700; }
+.kanban-empty-column { min-height: 307px; padding: 28px 18px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #9aa6ad; text-align: center; }
 .kanban-empty-column > span { width: 35px; height: 35px; display: grid; place-items: center; background: #e8edef; border-radius: 9px; font-size: 18px; }
 .kanban-empty-column p { margin: 13px 0 5px; color: #617079; font-weight: 700; }
 .kanban-empty-column small { max-width: 180px; color: #87949b; line-height: 1.45; }
+.workboard-date-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 
 @media (max-width: 1050px) {
     .project-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -264,7 +290,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
     .project-topbar .project-primary-button { margin-top: 21px; }
     .project-page-content { padding: 22px 18px 42px; }
     .project-card-grid, .kanban-board { grid-template-columns: 1fr; }
-    .kanban-empty-column { min-height: 190px; }
+    .kanban-column-body, .kanban-empty-column, .kanban-column-loading { min-height: 190px; }
     .project-modal-backdrop { padding: 14px; }
     .project-modal { padding: 22px 18px; }
     .project-board-header .project-coming-soon { display: inline-block; margin-top: 17px; }
@@ -274,4 +300,5 @@ button, a { -webkit-tap-highlight-color: transparent; }
     .workspace-delete-button { width: 100%; }
     .workspace-delete-modal .project-modal-actions { display: grid; grid-template-columns: 1fr; }
     .workspace-delete-modal .project-modal-actions button { width: 100%; }
+    .workboard-date-grid { grid-template-columns: 1fr; gap: 0; }
 }
